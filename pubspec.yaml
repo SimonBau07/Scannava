@@ -9,6 +9,7 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  camera: ^0.11.0+2
   image_picker: ^1.0.7
   cupertino_icons: ^1.0.2
   shared_preferences: ^2.3.5
@@ -24,13 +25,11 @@ flutter:
   uses-material-design: true
 
   assets:
-    # NEW model files (make sure these exist in assets/models/)
+    # Detection model used by camera + analyze flows.
     - assets/models/best_float32.tflite
+    # Classifier on YOLO crop (export your MobileNetV3 TFLite as cassava_mobilenetv3.tflite).
     - assets/models/cassava_mobilenetv3.tflite
-    - assets/models/cassava_yolov8.tflite
-
-    # Old model (optional: keep only if you still use it)
-    # - assets/models/cassava_model.tflite
+    - assets/models/cassava_labels.txt
 
     # Existing images
     - assets/images/l1.png

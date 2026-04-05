@@ -1,9 +1,10 @@
+import 'dart:io';
+import 'package:camera/camera.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
-import 'dart:io';
+
 import '../config/routes.dart';
 import '../config/theme.dart';
-import '../widgets/custom_button.dart';
 
 class CameraScreen extends StatefulWidget {
   const CameraScreen({Key? key}) : super(key: key);
@@ -13,135 +14,117 @@ class CameraScreen extends StatefulWidget {
 }
 
 class _CameraScreenState extends State<CameraScreen> {
-  // Instance of the ImagePicker to access hardware
   final ImagePicker _picker = ImagePicker();
+  CameraController? _cameraController;
+  bool _capturing = false;
 
-  /// Handles both Camera and Gallery actions
-  Future<void> _handleImageAction(ImageSource source) async {
+  @override
+  void initState() {
+    super.initState();
+    _initCamera();
+  }
+
+  Future<void> _initCamera() async {
     try {
-      final XFile? pickedFile = await _picker.pickImage(
-        source: source,
-        imageQuality: 80, // Slight compression to help with future AI processing speed
+      final cameras = await availableCameras();
+      final back = cameras.firstWhere(
+        (c) => c.lensDirection == CameraLensDirection.back,
+        orElse: () => cameras.first,
       );
-
-      if (pickedFile != null) {
-        File imageFile = File(pickedFile.path);
-        
-        // Ensure the widget is still mounted before navigating
-        if (!mounted) return;
-
-        // Navigate to the Analyzing Screen and pass the actual File object
-        Navigator.pushNamed(
-          context, 
-          AppRoutes.analyzing, 
-          arguments: imageFile,
-        );
-      }
+      _cameraController = CameraController(
+        back,
+        ResolutionPreset.high,
+        enableAudio: false,
+      );
+      await _cameraController!.initialize();
+      if (mounted) setState(() {});
     } catch (e) {
-      debugPrint("Error picking image: $e");
-      // Optional: Show a snackbar error to the user
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not access camera or gallery.')),
-        );
-      }
+      debugPrint('Camera init error: $e');
+    }
+  }
+
+  Future<void> _pickFromGallery() async {
+    final XFile? picked = await _picker.pickImage(
+      source: ImageSource.gallery,
+      imageQuality: 90,
+    );
+    if (picked == null || !mounted) return;
+    Navigator.pushNamed(context, AppRoutes.analyzing, arguments: File(picked.path));
+  }
+
+  Future<void> _captureAndAnalyze() async {
+    if (_capturing) return;
+    final controller = _cameraController;
+    if (controller == null || !controller.value.isInitialized) return;
+
+    setState(() => _capturing = true);
+    try {
+      final file = await controller.takePicture();
+      if (!mounted) return;
+      Navigator.pushNamed(context, AppRoutes.analyzing, arguments: File(file.path));
+    } catch (e) {
+      debugPrint('Capture error: $e');
+    } finally {
+      if (mounted) setState(() => _capturing = false);
     }
   }
 
   @override
+  void dispose() {
+    _cameraController?.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final controller = _cameraController;
     return Scaffold(
+      backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('Scan Cassava'),
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
-        ),
+        title: const Text('Cassava Capture'),
+        backgroundColor: Colors.black,
+        foregroundColor: Colors.white,
       ),
-      body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            children: [
-              // 1. Visual Placeholder / Instructions Area
-              Expanded(
-                child: Container(
-                  width: double.infinity,
-                  decoration: BoxDecoration(
-                    color: Colors.grey[100],
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: AppTheme.primaryGreen.withOpacity(0.3), 
-                      width: 2,
-                      style: BorderStyle.solid,
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
+      body: controller == null || !controller.value.isInitialized
+          ? const Center(child: CircularProgressIndicator())
+          : Stack(
+              fit: StackFit.expand,
+              children: [
+                Center(child: CameraPreview(controller)),
+                Positioned(
+                  bottom: 24,
+                  left: 16,
+                  right: 16,
+                  child: Row(
                     children: [
-                      Icon(
-                        Icons.camera_alt_outlined,
-                        size: 100,
-                        color: Colors.grey[400],
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _capturing ? null : _pickFromGallery,
+                          icon: const Icon(Icons.photo_library),
+                          label: const Text('Gallery'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.black87,
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
                       ),
-                      const SizedBox(height: 20),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(horizontal: 40),
-                        child: Text(
-                          'Place the cassava root in the center of the frame.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.grey[600],
-                            fontWeight: FontWeight.w500,
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: _capturing ? null : _captureAndAnalyze,
+                          icon: const Icon(Icons.camera_alt),
+                          label: Text(_capturing ? 'Capturing...' : 'Capture'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.primaryGreen,
+                            foregroundColor: Colors.white,
                           ),
                         ),
                       ),
                     ],
                   ),
                 ),
-              ),
-              
-              const SizedBox(height: 30),
-              
-              // 2. Helpful Tip Text
-              const Text(
-                'Tip: Bright natural light works best for AI accuracy.',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  fontSize: 13, 
-                  fontStyle: FontStyle.italic,
-                  color: AppTheme.textLight,
-                ),
-              ),
-              
-              const SizedBox(height: 30),
-
-              // 3. Action Buttons
-              CustomButton(
-                text: 'TAKE A PHOTO',
-                icon: Icons.camera_alt,
-                onPressed: () => _handleImageAction(ImageSource.camera),
-                backgroundColor: AppTheme.primaryGreen,
-                width: double.infinity,
-              ),
-              
-              const SizedBox(height: 16),
-              
-              CustomButton(
-                text: 'UPLOAD FROM GALLERY',
-                icon: Icons.photo_library,
-                onPressed: () => _handleImageAction(ImageSource.gallery),
-                isOutlined: true,
-                textColor: AppTheme.primaryGreen,
-                width: double.infinity,
-              ),
-              
-              const SizedBox(height: 10),
-            ],
-          ),
-        ),
-      ),
+              ],
+            ),
     );
   }
 }

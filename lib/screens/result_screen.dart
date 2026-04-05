@@ -60,16 +60,31 @@ class ResultScreen extends StatelessWidget {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(17),
                   child: result.imagePath.isNotEmpty
-                      ? Image.file(
-                          File(result.imagePath),
-                          fit: BoxFit.cover,
-                          errorBuilder: (context, error, stack) => const Icon(
-                              Icons.broken_image,
-                              size: 80,
-                              color: Colors.grey),
+                      ? LayoutBuilder(
+                          builder: (context, constraints) {
+                            return Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Image.file(
+                                  File(result.imagePath),
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) =>
+                                      const Icon(
+                                    Icons.broken_image,
+                                    size: 80,
+                                    color: Colors.grey,
+                                  ),
+                                ),
+                                // Box overlay intentionally removed for cleaner UX.
+                              ],
+                            );
+                          },
                         )
-                      : const Icon(Icons.image_not_supported,
-                          size: 80, color: Colors.grey),
+                      : const Icon(
+                          Icons.image_not_supported,
+                          size: 80,
+                          color: Colors.grey,
+                        ),
                 ),
               ),
               const SizedBox(height: 20),
